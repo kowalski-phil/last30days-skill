@@ -64,6 +64,7 @@ def run_actor_sync(
     run = client.actor(actor_id).call(
         run_input=run_input,
         timeout_secs=timeout_secs,
+        logger=None,  # Suppress verbose actor log streaming to stderr
     )
 
     dataset_id = run["defaultDatasetId"]
