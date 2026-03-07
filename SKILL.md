@@ -5,13 +5,23 @@ description: "Research a topic from the last 30 days. Also triggered by 'last30'
 argument-hint: 'last30 AI video tools, last30 best project management tools'
 allowed-tools: Bash, Read, Write, AskUserQuestion, WebSearch
 homepage: https://github.com/mvanhorn/last30days-skill
+repository: https://github.com/mvanhorn/last30days-skill
+author: mvanhorn
+license: MIT
 user-invocable: true
 metadata:
-  clawdbot:
+  openclaw:
     emoji: "📰"
     requires:
       env:
         - SCRAPECREATORS_API_KEY
+      optionalEnv:
+        - OPENAI_API_KEY
+        - XAI_API_KEY
+        - OPENROUTER_API_KEY
+        - PARALLEL_API_KEY
+        - BRAVE_API_KEY
+        - APIFY_API_TOKEN
       bins:
         - node
         - python3
@@ -25,7 +35,9 @@ metadata:
       - x
       - youtube
       - tiktok
+      - instagram
       - hackernews
+      - polymarket
       - trends
       - prompts
 ---

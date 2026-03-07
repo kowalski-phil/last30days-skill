@@ -1,5 +1,11 @@
 # /last30days v2.9.1
 
+[![ClawHub](https://img.shields.io/badge/ClawHub-last30days--official-blue)](https://clawhub.ai/skills/last30days-official)
+
+```bash
+clawhub install last30days-official
+```
+
 **The AI world reinvents itself every month. This skill keeps you current.** /last30days researches your topic across Reddit, X, YouTube, TikTok, Instagram, Hacker News, Polymarket, and the web from the last 30 days, finds what the community is actually upvoting, sharing, betting on, and saying on camera, and writes you a grounded narrative with real citations. Whether it's Seedance 2.0 access, paper.design prompts, or the latest Nano Banana Pro techniques, you'll know what people who are paying attention already know.
 
 **New in v2.9.1 — Auto-save to ~/Documents/Last30Days/:** Every run now saves the complete briefing as a topic-named `.md` file to your Documents folder. Build a personal research library automatically. Inspired by [@devin_explores](https://x.com/devin_explores).
