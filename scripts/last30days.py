@@ -1617,9 +1617,9 @@ def main():
         save_dir = Path(args.save_dir).expanduser()
         save_dir.mkdir(parents=True, exist_ok=True)
         slug = re.sub(r'[^a-z0-9]+', '-', args.topic.lower()).strip('-')[:60]
-        save_path = save_dir / f"{slug}.md"
+        save_path = save_dir / f"{slug}-raw.md"
         if save_path.exists():
-            save_path = save_dir / f"{slug}-{datetime.now().strftime('%Y-%m-%d')}.md"
+            save_path = save_dir / f"{slug}-raw-{datetime.now().strftime('%Y-%m-%d')}.md"
         content = render.render_compact(report, missing_keys=missing_keys)
         content += "\n" + render.render_source_status(report, source_info)
         save_path.write_text(content, encoding="utf-8")
