@@ -130,7 +130,12 @@ def _extract_domain_queries(topic: str, events: List[Dict]) -> List[str]:
 
 def _search_single_query(query: str, page: int = 1) -> Dict[str, Any]:
     """Run a single search query against Gamma API."""
-    params = {"q": query, "page": str(page)}
+    params = {
+        "q": query,
+        "page": str(page),
+        "events_status": "active",
+        "keep_closed_markets": "0",
+    }
     url = f"{GAMMA_SEARCH_URL}?{urlencode(params)}"
 
     try:
