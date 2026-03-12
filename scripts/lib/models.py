@@ -6,19 +6,12 @@ reasoning-heavy or creative work — mini models handle it equally well
 at ~3-5x lower cost. We prefer the newest-generation mini model, falling
 back to mainline only when mini isn't available.
 
-OpenAI cost per Reddit search call (web_search tool + JSON output):
-  gpt-4.1-mini:  ~$0.014  (fixed 8K search token block)
-  gpt-5-mini:    ~$0.015
-  gpt-4.1:       ~$0.044
-  gpt-5.2:       ~$0.043
-  gpt-4o:        ~$0.053
-
-xAI: grok-4-1-fast reasoning vs non-reasoning have identical token
-pricing ($0.20/1M in, $0.50/1M out). Non-reasoning skips the thinking
-phase, saving latency and reasoning token output costs.
+xAI non-reasoning variant preferred: same pricing as reasoning, but
+faster (skips thinking phase, saves reasoning token output costs).
 """
 
 import re
+import sys
 from typing import Dict, List, Optional, Tuple
 
 from . import cache, http, env
@@ -119,7 +112,11 @@ def select_openai_model(
             headers = {"Authorization": f"Bearer {api_key}"}
             response = http.get(OPENAI_MODELS_URL, headers=headers)
             models = response.get("data", [])
-        except http.HTTPError:
+        except http.HTTPError as e:
+            sys.stderr.write(f"[Models] Failed to fetch OpenAI models: {e}")
+            if hasattr(e, 'status_code') and e.status_code in (401, 403):
+                sys.stderr.write(" — API key may be invalid or lack permissions")
+            sys.stderr.write(f", using fallback {OPENAI_FALLBACK_MODELS[0]}\n")
             return OPENAI_FALLBACK_MODELS[0]
 
     candidates = [m for m in models if is_search_capable_model(m.get("id", ""))]

@@ -46,8 +46,9 @@ class TestDetectQueryType(unittest.TestCase):
         self.assertEqual(detect_query_type("OpenAI just announced GPT-6"), "breaking_news")
 
     def test_prediction_queries(self):
-        self.assertEqual(detect_query_type("will Trump win 2028 election"), "prediction")
         self.assertEqual(detect_query_type("odds of Fed rate cut"), "prediction")
+        self.assertEqual(detect_query_type("predict the next recession"), "prediction")
+        self.assertEqual(detect_query_type("election outcome 2028"), "prediction")
 
     def test_default_is_breaking_news(self):
         self.assertEqual(detect_query_type("tariffs"), "breaking_news")
@@ -60,6 +61,14 @@ class TestDetectQueryType(unittest.TestCase):
     def test_howto_beats_concept(self):
         """How-to is more specific than concept."""
         self.assertEqual(detect_query_type("how to explain transformers"), "how_to")
+
+    def test_will_alone_not_prediction(self):
+        """Bare 'will' should not trigger prediction classification."""
+        self.assertNotEqual(detect_query_type("Will React 19 support concurrent mode"), "prediction")
+
+    def test_or_for_not_comparison(self):
+        """'or X for Y' should not trigger comparison classification."""
+        self.assertNotEqual(detect_query_type("best tools or libraries for Python"), "comparison")
 
 
 class TestIsSourceEnabled(unittest.TestCase):

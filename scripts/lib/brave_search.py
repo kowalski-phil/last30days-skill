@@ -1,7 +1,7 @@
 """Brave Search web search for last30days skill.
 
 Uses the Brave Search API as a web search backend.
-Requires a paid Brave Search subscription (free tier eliminated Feb 2026).
+Requires a paid Brave Search subscription.
 
 Two modes:
   - Standard: /res/v1/web/search — returns URLs + snippets (default)
@@ -191,7 +191,7 @@ def _normalize_results(
                 continue
             if domain.startswith("www."):
                 domain = domain[4:]
-        except Exception:
+        except (ValueError, TypeError):
             domain = ""
 
         title = _clean_html(str(result.get("title", "")).strip())
@@ -247,7 +247,7 @@ def _normalize_llm_context(response: Dict[str, Any]) -> List[Dict[str, Any]]:
                 continue
             if domain.startswith("www."):
                 domain = domain[4:]
-        except Exception:
+        except (ValueError, TypeError):
             domain = ""
 
         title = str(result.get("title", "")).strip()

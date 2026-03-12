@@ -19,21 +19,21 @@ _HOWTO_PATTERNS = re.compile(
     r"\b(how to|tutorial|step by step|setup|install|configure|deploy|migrate|implement|build a|create a)\b", re.I
 )
 _COMPARISON_PATTERNS = re.compile(
-    r"\b(vs\.?|versus|compared to|comparison|better than|or\b.*\bfor\b|difference between|switch from)\b", re.I
+    r"\b(vs\.?|versus|compared to|comparison|better than|difference between|switch from)\b", re.I
 )
 _BREAKING_PATTERNS = re.compile(
     r"\b(latest|breaking|just announced|launched|released|new|update|news|happened|today|this week)\b", re.I
 )
 _PREDICTION_PATTERNS = re.compile(
-    r"\b(will|predict|forecast|odds|chance|probability|election|outcome|bet on|market for)\b", re.I
+    r"\b(predict|forecast|odds|chance|probability|election|outcome|bet on|market for)\b", re.I
 )
 
 
 def detect_query_type(topic: str) -> QueryType:
     """Classify a query into a type using pattern matching.
 
-    Returns the most specific match. When multiple patterns match,
-    priority order is: comparison > how_to > product > opinion > prediction > concept > breaking_news.
+    Returns the first match in priority order:
+    comparison > how_to > product > opinion > prediction > concept > breaking_news.
     """
     # Most specific first
     if _COMPARISON_PATTERNS.search(topic):
@@ -69,6 +69,7 @@ SOURCE_TIERS = {
 }
 
 # WebSearch penalty adjustment by query type.
+# Points subtracted from websearch score (0-100 scale). 0 = no penalty, 15 = full penalty.
 # Concept/how_to queries benefit from authoritative web sources.
 WEBSEARCH_PENALTY_BY_TYPE = {
     "product": 15,        # default: social discussion > blog posts

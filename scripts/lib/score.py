@@ -11,10 +11,12 @@ WEIGHT_RELEVANCE = 0.45
 WEIGHT_RECENCY = 0.25
 WEIGHT_ENGAGEMENT = 0.30
 
-# WebSearch weights (no engagement, reweighted to 100%)
+# WebSearch weights (no engagement data available)
 WEBSEARCH_WEIGHT_RELEVANCE = 0.55
 WEBSEARCH_WEIGHT_RECENCY = 0.45
-WEBSEARCH_SOURCE_PENALTY = 15  # Points deducted for lacking engagement
+# Default web search penalty (fallback when query_type is not provided).
+# Per-type penalties in query_type.WEBSEARCH_PENALTY_BY_TYPE.
+WEBSEARCH_SOURCE_PENALTY = 15
 
 # WebSearch date confidence adjustments
 WEBSEARCH_VERIFIED_BONUS = 10   # Bonus for URL-verified recent date (high confidence)
@@ -706,16 +708,19 @@ _ITEM_SOURCE_MAP = {
     schema.TikTokItem: "tiktok",
     schema.InstagramItem: "instagram",
     schema.HackerNewsItem: "hn",
+    schema.BlueskyItem: "bluesky",
+    schema.TruthSocialItem: "truthsocial",
     schema.PolymarketItem: "polymarket",
 }
-_DEFAULT_TIEBREAKER = {"reddit": 0, "x": 1, "youtube": 2, "tiktok": 3, "instagram": 4, "hn": 5, "polymarket": 6, "web": 7}
+_DEFAULT_TIEBREAKER = {"reddit": 0, "x": 1, "youtube": 2, "tiktok": 3, "instagram": 4, "hn": 5, "bluesky": 6, "truthsocial": 7, "polymarket": 8, "web": 9}
 
 
 def sort_items(items: List[Union[schema.RedditItem, schema.XItem, schema.WebSearchItem, schema.YouTubeItem, schema.TikTokItem, schema.InstagramItem, schema.HackerNewsItem, schema.PolymarketItem]], query_type: QueryType = None) -> List:
-    """Sort items by score (descending), then date, then source priority.
+    """Sort items by score (descending), then date, then source tiebreaker.
 
-    Source priority varies by query type: YouTube ranks first for how_to,
-    X ranks first for breaking_news, Polymarket ranks first for prediction.
+    Tiebreaker (tertiary sort key, after score and date): source priority
+    varies by query type. YouTube ranks first for how_to, X ranks first
+    for breaking_news, Polymarket ranks first for prediction.
 
     Args:
         items: List of items to sort
