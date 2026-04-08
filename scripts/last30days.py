@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402
-"""last30days-3 v3.0.0-alpha CLI."""
+"""last30days v3.0.0 CLI."""
 
 from __future__ import annotations
 

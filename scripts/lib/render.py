@@ -27,7 +27,7 @@ _FUN_LEVELS = {
 def render_compact(report: schema.Report, cluster_limit: int = 8, fun_level: str = "medium") -> str:
     non_empty = [s for s, items in sorted(report.items_by_source.items()) if items]
     lines = [
-        f"# last30days-3 v3.0.0-alpha: {report.topic}",
+        f"# last30days v3.0.0: {report.topic}",
         "",
         f"- Date range: {report.range_from} to {report.range_to}",
         f"- Sources: {len(non_empty)} active ({', '.join(_source_label(s) for s in non_empty)})" if non_empty else "- Sources: none",
@@ -81,7 +81,7 @@ def render_full(report: schema.Report) -> str:
     # Start with the same header as compact
     non_empty = [s for s, items in sorted(report.items_by_source.items()) if items]
     lines = [
-        f"# last30days-3 v3.0.0-alpha: {report.topic}",
+        f"# last30days v3.0.0: {report.topic}",
         "",
         f"- Date range: {report.range_from} to {report.range_to}",
         f"- Sources: {len(non_empty)} active ({', '.join(_source_label(s) for s in non_empty)})" if non_empty else "- Sources: none",
