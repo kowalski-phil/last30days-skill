@@ -12,7 +12,7 @@ PREFIXES = [
     'what are', 'what is', 'tips for', 'best practices for',
 ]
 
-# Multi-word suffixes (used by bird_x)
+# Multi-word suffixes stripped when `strip_suffixes=True` is passed.
 SUFFIXES = [
     'best practices', 'use cases', 'prompt techniques',
     'prompting techniques', 'prompting tips',
@@ -60,7 +60,7 @@ def extract_core_subject(
         topic: Raw user query
         noise: Override noise word set (default: NOISE_WORDS)
         max_words: Cap result to N words (default: no cap)
-        strip_suffixes: Also strip trailing multi-word suffixes (bird_x uses this)
+        strip_suffixes: Also strip trailing multi-word suffixes
 
     Returns:
         Cleaned query string

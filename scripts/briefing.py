@@ -22,7 +22,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import store
 
-BRIEFS_DIR = Path.home() / ".local" / "share" / "last30days" / "briefs"
+# Project-local briefings directory
+BRIEFS_DIR = SCRIPT_DIR.parent / "data" / "briefs"
 
 
 def _parse_sqlite_utc_timestamp(value: str) -> datetime:

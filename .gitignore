@@ -1,4 +1,23 @@
-# Private benchmark / evaluation artifacts — never push to upstream
+# Secrets — NEVER commit
+.env
+
+# Personal research output — keep the folder structure, skip the files
+# (.gitkeep files let the empty folders exist in the repo)
+research/*
+!research/.gitkeep
+
+data/*
+!data/.gitkeep
+!data/briefs/
+
+# Personal synthesized briefs — keep folder, skip files
+data/briefs/*
+!data/briefs/.gitkeep
+
+# Upstream release notes — not relevant to this fork
+release-notes.md
+
+# Private benchmark / evaluation artifacts inherited from upstream
 docs/comparison-results/
 scripts/evaluate-synthesis.py
 scripts/generate-synthesis-inputs.py
@@ -7,6 +26,9 @@ docs/v2.1-tweets.md
 docs/30-day-anniversary-thread.md
 docs/30-day-anniversary-tweets.md
 variants/open/references/research.md
+
+# Build / runtime output
+output/
 
 # OS / tool files
 .DS_Store

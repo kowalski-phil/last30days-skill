@@ -9,9 +9,8 @@ from . import dates, schema
 SOURCE_LABELS = {
     "grounding": "Web",
     "hackernews": "Hacker News",
-    "truthsocial": "Truth Social",
-    "xiaohongshu": "Xiaohongshu",
     "x": "X",
+    "linkedin": "LinkedIn",
     "github": "GitHub",
     "perplexity": "Perplexity",
 }
@@ -134,8 +133,8 @@ def render_full(report: schema.Report) -> str:
     # ALL items by source (flat dump, v2-style)
     lines.append("## All Items by Source")
     lines.append("")
-    source_order = ["reddit", "x", "youtube", "tiktok", "instagram", "threads", "pinterest",
-                    "hackernews", "bluesky", "truthsocial", "polymarket", "grounding", "xiaohongshu", "github", "perplexity"]
+    source_order = ["reddit", "x", "linkedin", "youtube",
+                    "hackernews", "polymarket", "grounding", "github", "perplexity"]
     for source in source_order:
         items = report.items_by_source.get(source, [])
         if not items:
@@ -435,9 +434,15 @@ def _format_actor(item: schema.SourceItem | None) -> str | None:
         return None
     if item.source == "reddit" and item.container:
         return f"r/{item.container}"
-    if item.source in {"x", "bluesky", "truthsocial"} and item.author:
+    if item.source == "x" and item.author:
         return f"@{item.author.lstrip('@')}"
     if item.source == "youtube" and item.author:
+        return item.author
+    if item.source == "linkedin" and item.author:
+        # LinkedIn posts are by real-name profiles; prefer "Name @ Company"
+        # when the normalizer was able to split them, else just the name.
+        if item.container:
+            return f"{item.author} @ {item.container}"
         return item.author
     if item.container and item.container != "Polymarket":
         return item.container
@@ -450,14 +455,9 @@ def _format_actor(item: schema.SourceItem | None) -> str | None:
 ENGAGEMENT_DISPLAY: dict[str, list[tuple[str, str]]] = {
     "reddit":       [("score", "pts"), ("num_comments", "cmt")],
     "x":            [("likes", "likes"), ("reposts", "rt"), ("replies", "re")],
+    "linkedin":     [("reactions", "react"), ("comments", "cmt"), ("shares", "shr")],
     "youtube":      [("views", "views"), ("likes", "likes"), ("comments", "cmt")],
-    "tiktok":       [("views", "views"), ("likes", "likes"), ("comments", "cmt")],
-    "instagram":    [("views", "views"), ("likes", "likes"), ("comments", "cmt")],
-    "threads":      [("likes", "likes"), ("replies", "re")],
-    "pinterest":    [("saves", "saves"), ("comments", "cmt")],
     "hackernews":   [("points", "pts"), ("comments", "cmt")],
-    "bluesky":      [("likes", "likes"), ("reposts", "rt"), ("replies", "re")],
-    "truthsocial":  [("likes", "likes"), ("reposts", "rt"), ("replies", "re")],
     "polymarket":   [],
     "github":       [("reactions", "react"), ("comments", "cmt")],
     "perplexity":   [("citations", "cite")],
@@ -552,11 +552,13 @@ def _top_voices_overall(items_by_source: dict[str, list[schema.SourceItem]], lim
 def _stats_actor(item: schema.SourceItem) -> str | None:
     if item.source == "reddit" and item.container:
         return f"r/{item.container}"
-    if item.source in {"x", "bluesky", "truthsocial"} and item.author:
+    if item.source == "x" and item.author:
         return f"@{item.author.lstrip('@')}"
     if item.source == "grounding" and item.container:
         return item.container
     if item.source == "youtube" and item.author:
+        return item.author
+    if item.source == "linkedin" and item.author:
         return item.author
     if item.container and item.container != "Polymarket":
         return item.container
@@ -640,7 +642,12 @@ def _render_best_takes(candidates, limit=5, threshold=70.0):
                     text = body
         source_label = _source_label(candidate.source)
         author = candidate.source_items[0].author if candidate.source_items else None
-        attribution = f"@{author} on {source_label}" if author and candidate.source in ("x", "tiktok", "instagram", "threads") else f"{source_label}"
+        if author and candidate.source == "x":
+            attribution = f"@{author} on {source_label}"
+        elif author and candidate.source == "linkedin":
+            attribution = f"{author} on {source_label}"
+        else:
+            attribution = source_label
         if author and candidate.source == "reddit":
             container = candidate.source_items[0].container if candidate.source_items else None
             attribution = f"r/{container} comment" if container else "Reddit"

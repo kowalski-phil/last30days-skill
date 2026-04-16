@@ -7,7 +7,7 @@ Stores topics, research runs, and findings with:
 - URL-based dedup with engagement metric updates on re-sighting
 - Lightweight schema migrations without external dependencies
 
-Database location: ~/.local/share/last30days/research.db
+Database location: data/research.db (project-local)
 """
 
 import argparse
@@ -23,7 +23,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from lib import schema
 
-DB_DIR = Path.home() / ".local" / "share" / "last30days"
+# Project-local data directory
+DB_DIR = SCRIPT_DIR.parent / "data"
 DB_PATH = DB_DIR / "research.db"
 
 # Allow override for testing

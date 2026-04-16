@@ -11,8 +11,10 @@ from shutil import which
 from typing import Any
 
 from . import (
-    bird_x,
-    bluesky,
+    apify_linkedin,
+    apify_reddit,
+    apify_x,
+    apify_youtube,
     dates,
     dedupe,
     entity_extract,
@@ -20,10 +22,8 @@ from . import (
     github,
     grounding,
     hackernews,
-    instagram,
     normalize,
     perplexity,
-    pinterest,
     planner,
     polymarket,
     providers,
@@ -34,12 +34,6 @@ from . import (
     schema,
     signals,
     snippet,
-    threads,
-    tiktok,
-    truthsocial,
-    xai_x,
-    xiaohongshu_api,
-    xquik,
     youtube_yt,
 )
 from .cluster import cluster_candidates
@@ -53,30 +47,22 @@ DEPTH_SETTINGS = {
 
 SEARCH_ALIAS = {
     "hn": "hackernews",
-    "bsky": "bluesky",
-    "truth": "truthsocial",
     "web": "grounding",
-    "xhs": "xiaohongshu",
-    "xquik": "xquik",
+    "li": "linkedin",
 }
 
-MAX_SOURCE_FETCHES: dict[str, int] = {"x": 2}
+MAX_SOURCE_FETCHES: dict[str, int] = {"x": 2, "linkedin": 2}
 
 MOCK_AVAILABLE_SOURCES = [
     "reddit",
     "x",
+    "linkedin",
     "youtube",
-    "tiktok",
-    "instagram",
     "hackernews",
-    "bluesky",
-    "truthsocial",
     "polymarket",
     "grounding",
-    "xiaohongshu",
     "github",
     "perplexity",
-    "xquik",
 ]
 
 
@@ -95,33 +81,21 @@ def available_sources(config: dict[str, Any], requested_sources: list[str] | Non
     available: list[str] = []
     # reddit_public needs no API key - always available
     available.append("reddit")
-    if config.get("SCRAPECREATORS_API_KEY"):
-        available.extend(["tiktok", "instagram"])
     if env.get_x_source(config):
         available.append("x")
-    if which("yt-dlp") or env.is_youtube_sc_available(config):
+    if config.get("APIFY_API_TOKEN"):
+        available.append("linkedin")
+    if config.get("APIFY_API_TOKEN") or which("yt-dlp"):
         available.append("youtube")
     available.extend(["hackernews", "polymarket"])
     if config.get("GITHUB_TOKEN") or which("gh"):
         available.append("github")
-    if env.is_bluesky_available(config):
-        available.append("bluesky")
-    if env.is_truthsocial_available(config):
-        available.append("truthsocial")
     if config.get("BRAVE_API_KEY") or config.get("EXA_API_KEY") or config.get("SERPER_API_KEY") or config.get("PARALLEL_API_KEY"):
         available.append("grounding")
     # Perplexity Sonar: opt-in additive source via INCLUDE_SOURCES=perplexity
     include_sources = (config.get("INCLUDE_SOURCES") or "").lower().split(",")
     if config.get("OPENROUTER_API_KEY") and "perplexity" in include_sources:
         available.append("perplexity")
-    if requested_sources and "xiaohongshu" in requested_sources and env.is_xiaohongshu_available(config):
-        available.append("xiaohongshu")
-    if env.is_threads_available(config):
-        available.append("threads")
-    if requested_sources and "pinterest" in requested_sources and env.is_pinterest_available(config):
-        available.append("pinterest")
-    if env.is_xquik_available(config):
-        available.append("xquik")
     return available
 
 
@@ -139,21 +113,15 @@ def diagnose(config: dict[str, Any], requested_sources: list[str] | None = None)
     elif config.get("PARALLEL_API_KEY"):
         native_web_backend = "parallel"
     providers_status = {
-        "google": bool(google_key),
-        "openai": bool(config.get("OPENAI_API_KEY")) and config.get("OPENAI_AUTH_STATUS") == env.AUTH_STATUS_OK,
-        "xai": bool(config.get("XAI_API_KEY")),
         "openrouter": bool(config.get("OPENROUTER_API_KEY")),
+        "apify": bool(config.get("APIFY_API_TOKEN")),
     }
     return {
         "providers": providers_status,
         "local_mode": not any(providers_status.values()),
         "reasoning_provider": (config.get("LAST30DAYS_REASONING_PROVIDER") or "auto").lower(),
         "x_backend": x_status["source"],
-        "bird_installed": x_status["bird_installed"],
-        "bird_authenticated": x_status["bird_authenticated"],
-        "bird_username": x_status["bird_username"],
         "native_web_backend": native_web_backend,
-        "has_scrapecreators": bool(config.get("SCRAPECREATORS_API_KEY")),
         "has_github": bool(config.get("GITHUB_TOKEN") or which("gh")),
         "available_sources": available_sources(config, requested_sources),
     }
@@ -171,9 +139,6 @@ def run(
     web_backend: str = "auto",
     external_plan: dict | None = None,
     subreddits: list[str] | None = None,
-    tiktok_hashtags: list[str] | None = None,
-    tiktok_creators: list[str] | None = None,
-    ig_creators: list[str] | None = None,
     lookback_days: int = 30,
     github_user: str | None = None,
     github_repos: list[str] | None = None,
@@ -315,9 +280,6 @@ def run(
                         web_backend=web_backend,
                         raw_topic=topic,
                         subreddits=subreddits,
-                        tiktok_hashtags=tiktok_hashtags,
-                        tiktok_creators=tiktok_creators,
-                        ig_creators=ig_creators,
                     )
                 ] = (subquery, source)
 
@@ -345,9 +307,6 @@ def run(
                             web_backend=web_backend,
                             raw_topic=topic,
                             subreddits=subreddits,
-                            tiktok_hashtags=tiktok_hashtags,
-                            tiktok_creators=tiktok_creators,
-                            ig_creators=ig_creators,
                         )
                     except Exception as retry_exc:
                         bundle.errors_by_source[source] = f"{exc} (retried once, still failed: {retry_exc})"
@@ -365,23 +324,7 @@ def run(
             if artifact:
                 bundle.artifacts.setdefault("grounding", []).append(artifact)
 
-    # Phase 2: supplemental entity-based searches
-    _run_supplemental_searches(
-        topic=topic,
-        bundle=bundle,
-        plan=plan,
-        config=config,
-        depth=depth,
-        date_range=(from_date, to_date),
-        runtime=runtime,
-        mock=mock,
-        rate_limited_sources=rate_limited_sources,
-        rate_limit_lock=rate_limit_lock,
-        x_handle=x_handle,
-        x_related=x_related,
-    )
-
-    # Phase 2b: retry thin sources with simplified query
+    # Phase 2: retry thin sources with simplified query
     # Note: _github_skip_sources tells the retry to not re-run GitHub keyword search
     # when project-mode or person-mode already provided authoritative data.
     _github_skip_retry = {"github"} if (_github_person_done or _github_custom_done) else set()
@@ -520,153 +463,6 @@ def _is_transient_error(exc: Exception) -> bool:
     return any(code in msg for code in ("500", "502", "503", "504"))
 
 
-def _run_supplemental_searches(
-    *,
-    topic: str,
-    bundle: schema.RetrievalBundle,
-    plan: schema.QueryPlan,
-    config: dict[str, Any],
-    depth: str,
-    date_range: tuple[str, str],
-    runtime: schema.ProviderRuntime,
-    mock: bool,
-    rate_limited_sources: set[str],
-    rate_limit_lock: threading.Lock,
-    x_handle: str | None = None,
-    x_related: list[str] | None = None,
-) -> None:
-    """Phase 2: extract entities from Phase 1 results, run targeted supplemental searches."""
-    if depth == "quick" or mock:
-        return
-
-    from_date, to_date = date_range
-
-    # Convert SourceItems to dicts for entity_extract
-    x_dicts = [
-        {"author_handle": item.author or "", "text": item.body or ""}
-        for item in bundle.items_by_source.get("x", [])
-    ]
-    reddit_dicts = [
-        {
-            "subreddit": item.container or "",
-            "comment_insights": item.metadata.get("comment_insights", []),
-            "top_comments": [
-                {"excerpt": c.get("excerpt", c.get("text", ""))}
-                for c in (item.metadata.get("top_comments") or [])
-                if isinstance(c, dict)
-            ],
-        }
-        for item in bundle.items_by_source.get("reddit", [])
-    ]
-
-    if not x_dicts and not reddit_dicts and not x_handle and not x_related:
-        return
-
-    entities = entity_extract.extract_entities(
-        reddit_dicts, x_dicts,
-        max_handles=3, max_subreddits=3,
-    )
-
-    handles = entities.get("x_handles", [])
-
-    # Add explicit --x-handle if provided
-    if x_handle:
-        handle_clean = x_handle.lstrip("@").lower()
-        if handle_clean not in [h.lower() for h in handles]:
-            handles.insert(0, handle_clean)
-
-    # Collect related handles (searched separately with lower weight)
-    related_handles = []
-    if x_related:
-        primary_lower = x_handle.lstrip("@").lower() if x_handle else ""
-        for rh in x_related:
-            rh_clean = rh.lstrip("@").lower().strip()
-            if rh_clean and rh_clean != primary_lower and rh_clean not in [h.lower() for h in handles]:
-                related_handles.append(rh_clean)
-
-    if not handles and not related_handles:
-        return
-
-    # Check if X is rate-limited
-    if "x" in rate_limited_sources:
-        return
-
-    backend = runtime.x_search_backend or env.get_x_source(config)
-    if backend != "bird":
-        return  # Handle search only works with Bird CLI
-
-    # Collect existing URLs for deduplication
-    existing_urls = {
-        item.url
-        for items in bundle.items_by_source.values()
-        for item in items
-        if item.url
-    }
-
-    ranking_query = plan.subqueries[0].ranking_query if plan.subqueries else topic
-    primary_label = plan.subqueries[0].label if plan.subqueries else "primary"
-
-    # Search primary handles (full weight)
-    if handles:
-        try:
-            raw_items = bird_x.search_handles(
-                handles, topic, from_date, count_per=3,
-            )
-        except Exception as exc:
-            print(f"[Pipeline] Phase 2 handle search failed: {exc}", file=sys.stderr)
-            if not bundle.items_by_source.get("x"):
-                bundle.errors_by_source["x"] = f"Phase 2 handle search: {exc}"
-            raw_items = []
-
-        if raw_items:
-            normalized = _normalize_score_dedupe(
-                "x", raw_items, from_date, to_date,
-                freshness_mode=plan.freshness_mode,
-                ranking_query=ranking_query,
-            )
-            # Deduplicate against Phase 1 URLs
-            normalized = [item for item in normalized if item.url not in existing_urls]
-            if normalized:
-                bundle.add_items(primary_label, "x", normalized)
-                # Update existing URLs for related-handle dedup
-                for item in normalized:
-                    if item.url:
-                        existing_urls.add(item.url)
-
-    # Search related handles with lower weight (0.3)
-    if related_handles:
-        try:
-            raw_items = bird_x.search_handles(
-                related_handles, topic, from_date, count_per=3,
-            )
-        except Exception as exc:
-            print(f"[Pipeline] Phase 2 related handle search failed: {exc}", file=sys.stderr)
-            raw_items = []
-
-        if raw_items:
-            normalized = _normalize_score_dedupe(
-                "x", raw_items, from_date, to_date,
-                freshness_mode=plan.freshness_mode,
-                ranking_query=ranking_query,
-            )
-            # Deduplicate against all existing URLs (Phase 1 + primary handles)
-            normalized = [item for item in normalized if item.url not in existing_urls]
-            if normalized:
-                # Use a separate subquery label with lower weight so RRF
-                # scores related-handle results below primary results.
-                bundle.add_items("supplemental-related", "x", normalized)
-                # Register the supplemental-related label in the plan for fusion
-                if not any(sq.label == "supplemental-related" for sq in plan.subqueries):
-                    plan.subqueries.append(
-                        schema.SubQuery(
-                            label="supplemental-related",
-                            search_query=", ".join(related_handles),
-                            ranking_query=ranking_query,
-                            sources=["x"],
-                            weight=0.3,
-                        )
-                    )
-
 
 def _retry_thin_sources(
     *,
@@ -784,9 +580,6 @@ def _retrieve_stream(
     web_backend: str = "auto",
     raw_topic: str = "",
     subreddits: list[str] | None = None,
-    tiktok_hashtags: list[str] | None = None,
-    tiktok_creators: list[str] | None = None,
-    ig_creators: list[str] | None = None,
 ) -> tuple[list[dict], dict]:
     # Early exit if source was rate-limited by a sibling future
     if rate_limited_sources is not None and source in rate_limited_sources:
@@ -798,10 +591,23 @@ def _retrieve_stream(
         return grounding.web_search(
             subquery.search_query, date_range, config, backend=web_backend)
     if source == "reddit":
-        # Use raw_topic so expand_reddit_queries() generates diverse variants
-        # from the original user topic, not the planner's narrowed search_query.
         reddit_query = raw_topic or subquery.search_query
-        # Public Reddit first (free, gets comments); SC as backup
+        apify_token = config.get("APIFY_API_TOKEN")
+        # Apify Reddit first (if token available)
+        if apify_token:
+            try:
+                results = apify_reddit.search_reddit_apify(
+                    reddit_query, from_date, to_date, depth=depth,
+                    subreddits=subreddits, token=apify_token,
+                )
+                if results:
+                    return results, {}
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[Reddit] Apify search failed ({type(exc).__name__}: {exc}), "
+                    f"falling back to public JSON\n"
+                )
+        # Fallback: free public Reddit JSON (no API key needed)
         try:
             public_results = reddit_public.search_reddit_public(
                 reddit_query, from_date, to_date, depth=depth,
@@ -811,142 +617,78 @@ def _retrieve_stream(
                 return public_results, {}
         except Exception as exc:
             sys.stderr.write(
-                f"[Reddit] Public search failed ({type(exc).__name__}: {exc})"
+                f"[Reddit] Public search also failed ({type(exc).__name__}: {exc})\n"
             )
-            if not config.get("SCRAPECREATORS_API_KEY"):
-                sys.stderr.write("\n")
-                return [], {}
-            sys.stderr.write(", using ScrapeCreators backup\n")
-        # Fallback to ScrapeCreators if public returned empty or raised
-        if config.get("SCRAPECREATORS_API_KEY"):
-            try:
-                result = reddit.search_and_enrich(
-                    reddit_query,
-                    from_date,
-                    to_date,
-                    depth=depth,
-                    token=config.get("SCRAPECREATORS_API_KEY"),
-                    subreddits=subreddits,
-                )
-                return reddit.parse_reddit_response(result), {}
-            except Exception as exc:
-                sys.stderr.write(
-                    f"[Reddit] ScrapeCreators backup also failed "
-                    f"({type(exc).__name__}: {exc})\n"
-                )
         return [], {}
     if source == "x":
-        backend = runtime.x_search_backend or env.get_x_source(config)
-        if backend == "bird":
-            result = bird_x.search_x(subquery.search_query, from_date, to_date, depth=depth)
-            return bird_x.parse_bird_response(result, query=subquery.search_query), {}
-        if backend == "xai":
-            model = config.get("LAST30DAYS_X_MODEL") or config.get("XAI_MODEL_PIN") or providers.XAI_DEFAULT
-            result = xai_x.search_x(
-                config["XAI_API_KEY"],
-                model,
-                subquery.search_query,
-                from_date,
-                to_date,
-                depth=depth,
+        apify_token = config.get("APIFY_API_TOKEN")
+        if not apify_token:
+            return [], {}
+        x_query = raw_topic or subquery.search_query
+        try:
+            results = apify_x.search_x_apify(
+                x_query, from_date, to_date, depth=depth, token=apify_token,
             )
-            return xai_x.parse_x_response(result), {}
-        raise RuntimeError("No X backend is available.")
+            return results, {}
+        except Exception as exc:
+            sys.stderr.write(
+                f"[X] Apify search failed ({type(exc).__name__}: {exc})\n"
+            )
+            return [], {}
+    if source == "linkedin":
+        apify_token = config.get("APIFY_API_TOKEN")
+        li_query = raw_topic or subquery.search_query
+        if not apify_token:
+            return [], {}
+        try:
+            results = apify_linkedin.search_linkedin_apify(
+                li_query, from_date, to_date, depth=depth, token=apify_token,
+            )
+            return results, {}
+        except Exception as exc:
+            sys.stderr.write(
+                f"[LinkedIn] Apify search failed ({type(exc).__name__}: {exc})\n"
+            )
+            return [], {}
     if source == "youtube":
-        # Use raw_topic so expand_youtube_queries() generates diverse variants
-        # from the original user topic, not the planner's narrowed search_query.
         yt_query = raw_topic or subquery.search_query
+        apify_token = config.get("APIFY_API_TOKEN")
+        # Apify YouTube first (if token available)
+        if apify_token:
+            try:
+                result = apify_youtube.search_youtube_apify(
+                    yt_query, from_date, to_date, depth=depth, token=apify_token,
+                )
+                items = result.get("items", [])
+                if items:
+                    return items, {}
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[YouTube] Apify search failed ({type(exc).__name__}: {exc}), "
+                    f"falling back to yt-dlp\n"
+                )
+        # Fallback: yt-dlp if installed locally
         result = None
-        # Try yt-dlp first, fall back to SC YouTube if it fails or isn't installed
         if which("yt-dlp"):
             try:
                 result = youtube_yt.search_and_transcribe(yt_query, from_date, to_date, depth=depth)
             except Exception:
                 result = None
-        if (result is None or not result.get("items")) and env.is_youtube_sc_available(config):
-            sc_token = config.get("SCRAPECREATORS_API_KEY", "")
-            result = youtube_yt.search_youtube_sc(yt_query, from_date, to_date, depth=depth, token=sc_token)
         if result is None:
             result = {"items": []}
-        # Enrich top videos with comments when SC key is available
         items = youtube_yt.parse_youtube_response(result)
-        if items and env.is_youtube_comments_available(config):
-            sc_token = config.get("SCRAPECREATORS_API_KEY", "")
-            youtube_yt.enrich_with_comments(items, token=sc_token)
         return items, {}
-    if source == "tiktok":
-        # Use raw_topic so expand_tiktok_queries() generates diverse variants
-        # from the original user topic, not the planner's narrowed search_query.
-        tiktok_query = raw_topic or subquery.search_query
-        result = tiktok.search_and_enrich(
-            tiktok_query,
-            from_date,
-            to_date,
-            depth=depth,
-            token=env.get_tiktok_token(config),
-            hashtags=tiktok_hashtags,
-            creators=tiktok_creators,
-        )
-        return tiktok.parse_tiktok_response(result), {}
-    if source == "instagram":
-        # Use raw_topic so expand_instagram_queries() generates diverse variants
-        # from the original user topic, not the planner's narrowed search_query.
-        ig_query = raw_topic or subquery.search_query
-        result = instagram.search_and_enrich(
-            ig_query,
-            from_date,
-            to_date,
-            depth=depth,
-            token=env.get_instagram_token(config),
-            ig_creators=ig_creators,
-        )
-        return instagram.parse_instagram_response(result), {}
     if source == "hackernews":
         result = hackernews.search_hackernews(subquery.search_query, from_date, to_date, depth=depth)
         return hackernews.parse_hackernews_response(result, query=subquery.search_query), {}
-    if source == "bluesky":
-        result = bluesky.search_bluesky(subquery.search_query, from_date, to_date, depth=depth, config=config)
-        return bluesky.parse_bluesky_response(result), {}
-    if source == "threads":
-        result = threads.search_threads(
-            subquery.search_query, from_date, to_date,
-            depth=depth,
-            token=config.get("SCRAPECREATORS_API_KEY"),
-        )
-        return threads.parse_threads_response(result), {}
-    if source == "truthsocial":
-        result = truthsocial.search_truthsocial(subquery.search_query, from_date, to_date, depth=depth, config=config)
-        return truthsocial.parse_truthsocial_response(result), {}
     if source == "polymarket":
         result = polymarket.search_polymarket(subquery.search_query, from_date, to_date, depth=depth)
         return polymarket.parse_polymarket_response(result, topic=subquery.search_query), {}
     if source == "github":
         result = github.search_github(subquery.search_query, from_date, to_date, depth=depth, token=config.get("GITHUB_TOKEN"))
         return result, {}
-    if source == "pinterest":
-        result = pinterest.search_pinterest(
-            subquery.search_query, from_date, to_date,
-            depth=depth,
-            token=env.get_pinterest_token(config),
-        )
-        return pinterest.parse_pinterest_response(result), {}
-    if source == "xiaohongshu":
-        return xiaohongshu_api.search_feeds(
-            subquery.search_query,
-            from_date,
-            to_date,
-            env.get_xiaohongshu_api_base(config),
-            depth=depth,
-        ), {}
     if source == "perplexity":
         return perplexity.search(subquery.search_query, date_range, config, deep=config.get("_deep_research", False))
-    if source == "xquik":
-        result = xquik.search_xquik(
-            subquery.search_query, from_date, to_date,
-            depth=depth,
-            token=env.get_xquik_token(config),
-        )
-        return xquik.parse_xquik_response(result), {}
     raise RuntimeError(f"Unsupported source: {source}")
 
 

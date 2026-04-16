@@ -273,7 +273,7 @@ def get_judgments(
     if not gemini_api_key or not items:
         return {}
     payload = call_gemini_judge(gemini_api_key, judge_model, build_judge_prompt(topic, query_type, items))
-    cache_file.write_text(json.dumps(payload, indent=2))
+    cache_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return {row["id"]: int(row["grade"]) for row in payload.get("judgments") or []}
 
 
@@ -406,7 +406,7 @@ def write_summary(output_dir: Path, baseline_label: str, candidate_label: str, s
         "candidate": candidate_label,
         "topics": summaries,
     }
-    (output_dir / "metrics.json").write_text(json.dumps(payload, indent=2))
+    (output_dir / "metrics.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     lines = [
         "# Search Quality Evaluation",
@@ -430,7 +430,7 @@ def write_summary(output_dir: Path, baseline_label: str, candidate_label: str, s
                 ret=row["stability"]["overall_retention_vs_baseline"],
             )
         )
-    (output_dir / "summary.md").write_text("\n".join(lines) + "\n")
+    (output_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_failure_summary(
@@ -449,7 +449,7 @@ def write_failure_summary(
         "topics": [],
     }
     payload["failures"] = failures
-    metrics_path.write_text(json.dumps(payload, indent=2))
+    metrics_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     summary_path = output_dir / "summary.md"
     lines = summary_path.read_text().splitlines() if summary_path.exists() else ["# Search Quality Evaluation", ""]
@@ -461,7 +461,7 @@ def write_failure_summary(
         ])
         for failure in failures:
             lines.append(f"- `{failure['topic']}`: {failure['error']}")
-    summary_path.write_text("\n".join(lines).rstrip() + "\n")
+    summary_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def parse_topics_file(path: Path) -> list[tuple[str, str]]:

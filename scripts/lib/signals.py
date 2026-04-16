@@ -9,16 +9,12 @@ from . import dates, relevance, schema
 # Editorial signal-to-noise scores. Grounding (Google Search) is 1.0 baseline;
 # social platforms discounted for noise.
 SOURCE_QUALITY = {
-    "xiaohongshu": 0.7,
     "hackernews": 0.8,
     "youtube": 0.85,
     "reddit": 0.6,
     "x": 0.68,
-    "bluesky": 0.66,
-    "truthsocial": 0.6,
+    "linkedin": 0.72,  # slightly higher than X because of real-name professional signal
     "polymarket": 0.5,
-    "instagram": 0.58,
-    "tiktok": 0.58,
 }
 
 
@@ -86,12 +82,9 @@ def _top_comment_score(item: schema.SourceItem) -> float:
 # are not simple log1p fields.
 ENGAGEMENT_WEIGHTS: dict[str, list[tuple[str, float]]] = {
     "x":            [("likes", 0.55), ("reposts", 0.25), ("replies", 0.15), ("quotes", 0.05)],
+    "linkedin":     [("reactions", 0.45), ("likes", 0.25), ("comments", 0.20), ("shares", 0.10)],
     "youtube":      [("views", 0.50), ("likes", 0.35), ("comments", 0.15)],
-    "tiktok":       [("views", 0.50), ("likes", 0.30), ("comments", 0.20)],
-    "instagram":    [("views", 0.50), ("likes", 0.30), ("comments", 0.20)],
     "hackernews":   [("points", 0.55), ("comments", 0.45)],
-    "bluesky":      [("likes", 0.40), ("reposts", 0.30), ("replies", 0.20), ("quotes", 0.10)],
-    "truthsocial":  [("likes", 0.45), ("reposts", 0.30), ("replies", 0.25)],
     "polymarket":   [("volume", 0.60), ("liquidity", 0.40)],
 }
 
@@ -167,28 +160,7 @@ def annotate_stream(
     return sorted(items, key=lambda item: item.local_rank_score or 0, reverse=True)
 
 
-_SOCIAL_SOURCES = {"reddit", "x", "tiktok", "instagram", "bluesky", "truthsocial"}
-
-# Minimum view count for short-video platforms. Items below this floor
-# are typically spam reposts or low-effort clips that add no unique signal.
-_VIDEO_ENGAGEMENT_FLOOR_SOURCES = {"tiktok", "instagram"}
-_VIDEO_ENGAGEMENT_FLOOR_VIEWS = 1000
-
-
-def _passes_engagement_floor(item: schema.SourceItem, sole_source: bool) -> bool:
-    """Check whether a TikTok/Instagram item meets the minimum view floor.
-
-    Items from sources not in _VIDEO_ENGAGEMENT_FLOOR_SOURCES always pass.
-    If the item's source is the *only* source represented in the batch
-    (sole_source=True), all items pass so we never return an empty result
-    for a whole source.
-    """
-    if item.source not in _VIDEO_ENGAGEMENT_FLOOR_SOURCES:
-        return True
-    if sole_source:
-        return True
-    views = item.engagement.get("views", 0) if item.engagement else 0
-    return views >= _VIDEO_ENGAGEMENT_FLOOR_VIEWS
+_SOCIAL_SOURCES = {"reddit", "x", "linkedin"}
 
 
 def prune_low_relevance(
@@ -199,12 +171,7 @@ def prune_low_relevance(
 
     Social-source items with zero engagement get a stricter threshold
     because zero engagement on a social platform is a strong noise signal.
-
-    TikTok and Instagram items with fewer than 1000 views are pruned
-    (unless they are the only source represented in the batch).
     """
-    sources_present = {item.source for item in items}
-
     def passes(item: schema.SourceItem) -> bool:
         rel = item.local_relevance if item.local_relevance is not None else 0.0
         if rel < minimum:
@@ -212,9 +179,6 @@ def prune_low_relevance(
         if item.source in _SOCIAL_SOURCES and (item.engagement_score is None or item.engagement_score == 0):
             if rel < minimum * 1.5:
                 return False
-        sole_source = sources_present == {item.source}
-        if not _passes_engagement_floor(item, sole_source):
-            return False
         return True
 
     filtered = [item for item in items if passes(item)]

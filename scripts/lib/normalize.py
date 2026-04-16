@@ -39,18 +39,11 @@ def normalize_source_items(
     normalizers = {
         "reddit": _normalize_reddit,
         "x": _normalize_x,
+        "linkedin": _normalize_linkedin,
         "youtube": _normalize_youtube,
-        "tiktok": lambda s, i, idx, fd, td: _normalize_shortform_video(s, i, idx, fd, td, "TK", "TikTok post"),
-        "instagram": lambda s, i, idx, fd, td: _normalize_shortform_video(s, i, idx, fd, td, "IG", "Instagram reel"),
         "hackernews": _normalize_hackernews,
-        "bluesky": lambda s, i, idx, fd, td: _normalize_microblog(s, i, idx, fd, td, "BS", "Bluesky post"),
-        "truthsocial": lambda s, i, idx, fd, td: _normalize_microblog(s, i, idx, fd, td, "TS", "Truth Social post"),
-        "threads": lambda s, i, idx, fd, td: _normalize_microblog(s, i, idx, fd, td, "TH", "Threads post"),
-        "xquik": _normalize_x,
-        "pinterest": _normalize_pinterest,
         "polymarket": _normalize_polymarket,
         "grounding": _normalize_grounding,
-        "xiaohongshu": _normalize_grounding,
         "github": _normalize_github,
         "perplexity": _normalize_grounding,
     }
@@ -186,6 +179,45 @@ def _normalize_x(
     )
 
 
+def _normalize_linkedin(
+    source: str,
+    item: dict[str, Any],
+    index: int,
+    from_date: str,
+    to_date: str,
+) -> schema.SourceItem:
+    text = str(item.get("text") or "").strip()
+    name = str(item.get("author_name") or "").strip()
+    headline = str(item.get("author_headline") or "").strip()
+    company = str(item.get("author_company") or "").strip()
+    # Stash LinkedIn-specific context (headline, company, profile URL) in
+    # metadata so the reranker/renderer can surface them without polluting
+    # the generic SourceItem shape.
+    metadata: dict[str, Any] = {}
+    if headline:
+        metadata["author_headline"] = headline
+    if company:
+        metadata["author_company"] = company
+    profile_url = str(item.get("author_profile_url") or "").strip()
+    if profile_url:
+        metadata["author_profile_url"] = profile_url
+    return _source_item(
+        item_id=str(item.get("id") or f"LI{index + 1}"),
+        source=source,
+        title=text[:160] or f"LinkedIn post {index + 1}",
+        body=text,
+        url=str(item.get("url") or ""),
+        author=name,
+        container=company or None,
+        published_at=item.get("date"),
+        date_confidence=_date_confidence(item, from_date, to_date),
+        engagement=item.get("engagement") or {},
+        relevance_hint=item.get("relevance", 0.5),
+        why_relevant=str(item.get("why_relevant") or ""),
+        metadata=metadata,
+    )
+
+
 def _normalize_youtube(
     source: str,
     item: dict[str, Any],
@@ -214,64 +246,6 @@ def _normalize_youtube(
         why_relevant=str(item.get("why_relevant") or ""),
         snippet=transcript,
         metadata=metadata,
-    )
-
-
-def _normalize_shortform_video(
-    source: str,
-    item: dict[str, Any],
-    index: int,
-    from_date: str,
-    to_date: str,
-    id_prefix: str,
-    default_title: str,
-) -> schema.SourceItem:
-    """Shared normalizer for TikTok and Instagram (identical structure)."""
-    caption = str(item.get("caption_snippet") or "").strip()
-    text = str(item.get("text") or "").strip()
-    return _source_item(
-        item_id=str(item.get("id") or f"{id_prefix}{index + 1}"),
-        source=source,
-        title=text[:140] or caption[:140] or f"{default_title} {index + 1}",
-        body="\n".join(part for part in [text, caption] if part),
-        url=str(item.get("url") or ""),
-        author=str(item.get("author_name") or ""),
-        published_at=item.get("date"),
-        date_confidence=_date_confidence(item, from_date, to_date, default="high"),
-        engagement=item.get("engagement") or {},
-        relevance_hint=item.get("relevance", 0.5),
-        why_relevant=str(item.get("why_relevant") or ""),
-        snippet=caption,
-        metadata={"hashtags": item.get("hashtags") or []},
-    )
-
-
-def _normalize_pinterest(
-    source: str,
-    item: dict[str, Any],
-    index: int,
-    from_date: str,
-    to_date: str,
-) -> schema.SourceItem:
-    """Normalizer for Pinterest pins (visual content with descriptions).
-
-    Saves are the primary engagement signal, analogous to likes/upvotes.
-    """
-    description = str(item.get("description") or "").strip()
-    return _source_item(
-        item_id=str(item.get("pin_id") or item.get("id") or f"PI{index + 1}"),
-        source=source,
-        title=description[:140] or f"Pinterest pin {index + 1}",
-        body=description,
-        url=str(item.get("url") or ""),
-        author=str(item.get("author") or ""),
-        container=str(item.get("board") or ""),
-        published_at=item.get("date"),
-        date_confidence=_date_confidence(item, from_date, to_date, default="low"),
-        engagement=item.get("engagement") or {},
-        relevance_hint=item.get("relevance", 0.5),
-        why_relevant=str(item.get("why_relevant") or ""),
-        snippet=description[:400],
     )
 
 
@@ -309,33 +283,6 @@ def _normalize_hackernews(
             "top_comments": top_comments,
             "comment_insights": item.get("comment_insights") or [],
         },
-    )
-
-
-def _normalize_microblog(
-    source: str,
-    item: dict[str, Any],
-    index: int,
-    from_date: str,
-    to_date: str,
-    id_prefix: str,
-    default_title: str,
-) -> schema.SourceItem:
-    """Shared normalizer for Bluesky and Truth Social (identical structure)."""
-    text = str(item.get("text") or "").strip()
-    return _source_item(
-        item_id=str(item.get("id") or f"{id_prefix}{index + 1}"),
-        source=source,
-        title=text[:140] or f"{default_title} {index + 1}",
-        body=text,
-        url=str(item.get("url") or ""),
-        author=str(item.get("handle") or item.get("author_handle") or "").lstrip("@"),
-        published_at=item.get("date"),
-        date_confidence=_date_confidence(item, from_date, to_date, default="high"),
-        engagement=item.get("engagement") or {},
-        relevance_hint=item.get("relevance", 0.5),
-        why_relevant=str(item.get("why_relevant") or ""),
-        metadata={"display_name": item.get("display_name")},
     )
 
 

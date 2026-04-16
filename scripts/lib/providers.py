@@ -16,10 +16,9 @@ XAI_DEFAULT = "grok-4-1-fast"
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
 XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_DEFAULT = "google/gemini-flash-2.0"
+OPENROUTER_DEFAULT = "google/gemini-3.1-flash-lite-preview"
 
 
 class ReasoningClient:
@@ -103,10 +102,8 @@ class GeminiClient(ReasoningClient):
 class OpenAIClient(ReasoningClient):
     name = "openai"
 
-    def __init__(self, token: str, auth_source: str, account_id: str | None):
+    def __init__(self, token: str):
         self.token = token
-        self.auth_source = auth_source
-        self.account_id = account_id
 
     def generate_text(
         self,
@@ -117,29 +114,6 @@ class OpenAIClient(ReasoningClient):
         response_mime_type: str | None = None,
     ) -> str:
         del tools, response_mime_type
-        if self.auth_source == env.AUTH_SOURCE_CODEX:
-            payload = {
-                "model": model,
-                "stream": True,
-                "store": False,
-                "input": [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": prompt}],
-                    }
-                ],
-            }
-            headers = {
-                "Authorization": f"Bearer {self.token}",
-                "chatgpt-account-id": self.account_id or "",
-                "OpenAI-Beta": "responses=experimental",
-                "originator": "pi",
-                "Content-Type": "application/json",
-            }
-            raw = http.post_raw(CODEX_RESPONSES_URL, payload, headers=headers, timeout=90)
-            return extract_openai_text(_parse_codex_stream(raw))
-
         payload = {
             "model": model,
             "store": False,
@@ -271,14 +245,14 @@ def resolve_runtime(config: dict[str, Any], depth: str) -> tuple[schema.Provider
     xai_key = config.get("XAI_API_KEY")
 
     if provider_name == "auto":
-        if google_key:
+        if config.get("OPENROUTER_API_KEY"):
+            provider_name = "openrouter"
+        elif google_key:
             provider_name = "gemini"
         elif openai_token and config.get("OPENAI_AUTH_STATUS") == env.AUTH_STATUS_OK:
             provider_name = "openai"
         elif xai_key:
             provider_name = "xai"
-        elif config.get("OPENROUTER_API_KEY"):
-            provider_name = "openrouter"
         else:
             return schema.ProviderRuntime(
                 reasoning_provider="local",
@@ -311,11 +285,7 @@ def resolve_runtime(config: dict[str, Any], depth: str) -> tuple[schema.Provider
     
             x_search_backend=_resolve_x_backend(config),
         )
-        return runtime, OpenAIClient(
-            openai_token,
-            config.get("OPENAI_AUTH_SOURCE") or env.AUTH_SOURCE_API_KEY,
-            config.get("OPENAI_CHATGPT_ACCOUNT_ID"),
-        )
+        return runtime, OpenAIClient(openai_token)
 
     if provider_name == "xai":
         if not xai_key:
@@ -333,6 +303,11 @@ def resolve_runtime(config: dict[str, Any], depth: str) -> tuple[schema.Provider
         openrouter_key = config.get("OPENROUTER_API_KEY")
         if not openrouter_key:
             raise RuntimeError("OpenRouter selected but OPENROUTER_API_KEY is not configured.")
+        # Allow OPENROUTER_MODEL to override both planner and rerank models
+        model_override = config.get("OPENROUTER_MODEL")
+        if model_override:
+            planner_model = model_override
+            rerank_model = model_override
         runtime = schema.ProviderRuntime(
             reasoning_provider="openrouter",
             planner_model=planner_model,

@@ -33,6 +33,17 @@ def ensure_supported_python(version_info: tuple[int, int, int] | object | None =
 
 ensure_supported_python()
 
+# Force UTF-8 on stdout/stderr so emoji and other non-cp1252 characters in
+# social content (tweets, Reddit posts, YouTube titles) don't crash the final
+# print on Windows. No-op on platforms that already default to UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    reconfigure = getattr(_stream, "reconfigure", None)
+    if reconfigure is not None:
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 SCRIPT_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(SCRIPT_DIR))
 
@@ -103,7 +114,9 @@ def save_output(report: schema.Report, emit: str, save_dir: str, suffix: str = "
         content = emit_output(report, emit)
     else:
         content = render.render_full(report)
-    out_path.write_text(content)
+    # Force UTF-8 so emoji and other non-cp1252 characters from social content
+    # (LinkedIn posts, tweets, Reddit comments) don't crash Windows file writes.
+    out_path.write_text(content, encoding="utf-8")
     return out_path
 
 
@@ -162,9 +175,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plan", help="JSON query plan (skips internal LLM planner). Can be a JSON string or a file path.")
     parser.add_argument("--save-suffix", help="Suffix for saved output filename (e.g., 'gemini' → kanye-west-raw-gemini.md)")
     parser.add_argument("--subreddits", help="Comma-separated subreddit names to search (e.g., SaaS,Entrepreneur)")
-    parser.add_argument("--tiktok-hashtags", help="Comma-separated TikTok hashtags without # (e.g., tella,screenrecording)")
-    parser.add_argument("--tiktok-creators", help="Comma-separated TikTok creator handles (e.g., TellaHQ,taborplace)")
-    parser.add_argument("--ig-creators", help="Comma-separated Instagram creator handles (e.g., tella.tv,laborstories)")
     parser.add_argument("--lookback-days", type=int, default=30, help="Number of days to look back for research (default: 30, watchlist uses 90)")
     parser.add_argument("--auto-resolve", action="store_true",
                         help="Use web search to discover subreddits/handles before planning (for platforms without WebSearch)")
@@ -220,32 +230,13 @@ def main() -> int:
 
     config = env.get_config()
 
-    # Handle setup subcommand
+    # Handle setup subcommand — just a status check for the two required keys
     topic = " ".join(args.topic).strip()
     if topic.lower() == "setup":
         from lib import setup_wizard
-        if "--openclaw" in extra_argv:
-            results = setup_wizard.run_openclaw_setup(config)
-            print(json.dumps(results))
-            return 0
-        if "--github" in extra_argv:
-            results = setup_wizard.run_github_auth()
-            print(json.dumps(results))
-            return 0
-        if "--device-auth" in extra_argv:
-            results = setup_wizard.run_full_device_auth()
-            print(json.dumps(results))
-            return 0
-        sys.stderr.write("Running auto-setup...\n")
-        results = setup_wizard.run_auto_setup(config)
-        from_browser = "auto"
-        if results.get("cookies_found"):
-            first_browser = next(iter(results["cookies_found"].values()))
-            from_browser = first_browser
-        setup_wizard.write_setup_config(env.CONFIG_FILE, from_browser=from_browser)
-        results["env_written"] = True
-        sys.stderr.write(setup_wizard.get_setup_status_text(results) + "\n")
-        return 0
+        status = setup_wizard.check_setup(config)
+        sys.stderr.write(setup_wizard.get_setup_status_text(status) + "\n")
+        return 0 if not status["missing"] else 1
 
     requested_sources = parse_search_flag(args.search) if args.search else None
     diag = pipeline.diagnose(config, requested_sources)
@@ -265,9 +256,6 @@ def main() -> int:
     try:
         x_related = [h.strip() for h in args.x_related.split(",") if h.strip()] if args.x_related else None
         subreddits = [s.strip().lstrip("r/") for s in args.subreddits.split(",") if s.strip()] if args.subreddits else None
-        tiktok_hashtags = [h.strip().lstrip("#") for h in args.tiktok_hashtags.split(",") if h.strip()] if args.tiktok_hashtags else None
-        tiktok_creators = [c.strip().lstrip("@") for c in args.tiktok_creators.split(",") if c.strip()] if args.tiktok_creators else None
-        ig_creators = [c.strip().lstrip("@") for c in args.ig_creators.split(",") if c.strip()] if args.ig_creators else None
         # Parse external plan if provided via --plan flag
         external_plan = None
         if args.plan:
@@ -331,9 +319,6 @@ def main() -> int:
             web_backend=args.web_backend,
             external_plan=external_plan,
             subreddits=subreddits,
-            tiktok_hashtags=tiktok_hashtags,
-            tiktok_creators=tiktok_creators,
-            ig_creators=ig_creators,
             lookback_days=args.lookback_days,
             github_user=github_user,
             github_repos=github_repos,
@@ -353,7 +338,11 @@ def main() -> int:
     # Show quality nudge if applicable
     try:
         from lib import quality_nudge
-        quality = quality_nudge.compute_quality_score(config, {})
+        active = [s for s, items in report.items_by_source.items() if items]
+        quality = quality_nudge.compute_quality_score(config, {
+            "active_sources": active,
+            "errors_by_source": dict(report.errors_by_source or {}),
+        })
         if quality.get("nudge_text"):
             sys.stderr.write(f"\n{quality['nudge_text']}\n")
             sys.stderr.flush()
